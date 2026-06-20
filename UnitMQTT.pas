@@ -1,6 +1,7 @@
 (*****************************************************************************)
 {    Project MQTT Dashboard
-    VCL Application to test a connection with a MQTT Broker
+VCL Application to tets a connection with a broker MQTT using the TMS MQTT component
+extracted from https://www.tmssoftware.com/site/tmsmqtt.asp
     There must be chosen a free MQTT broker, as
     "test.mosquitto.org"; //"broker.hivemq.com";  //"iot.eclipse.com";
     //"mqtt.fluux.io"; //"test.mosca.io"; //"broker.mqttdashboard.com";,
@@ -10,7 +11,7 @@
 
    }
     //      Copyright: Fernando Pazos
-    //      may 2022
+    //      may 2023
 (*****************************************************************************)
 
 unit UnitMQTT;
@@ -20,12 +21,11 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, TMS.MQTT.Global, Vcl.StdCtrls,
-  TMS.MQTT.Client, Vcl.ExtCtrls, Vcl.Menus, ShellApi, Vcl.ToolWin, Vcl.ComCtrls,
-  Vcl.Grids, Vcl.ValEdit;
+  Vcl.ExtCtrls, Vcl.Menus, ShellApi, Vcl.ToolWin, Vcl.ComCtrls,
+  Vcl.Grids, Vcl.ValEdit, TMS.MQTT.Client;
 
 type
   TFormMQTT = class(TForm)
-    TMSMQTTClient1: TTMSMQTTClient;
     MemoLog: TMemo;
     ConnectBtn: TButton;
     LedSha2: TShape;
@@ -47,10 +47,6 @@ type
     About1: TMenuItem;
     Panel1: TPanel;
     PortComboBox: TComboBox;
-    LabelQos: TLabel;
-    QoScombobox: TComboBox;
-    LabelSSL: TLabel;
-    RadioButtonSSL: TRadioButton;
     LabelConnect: TLabel;
     EditTopic: TEdit;
     LabelTopic: TLabel;
@@ -59,28 +55,36 @@ type
     PublishBtn: TButton;
     publishpanel: TPanel;
     Splitter1: TSplitter;
-    SubTopicsMemo: TMemo;
     EditTopicsubs: TEdit;
     PanelTopic: TPanel;
     Splitter2: TSplitter;
+    LabelTopic2Subs: TLabel;
+    EditTopicSubsBox: TEdit;
+    ButtonSubs: TButton;
+    TopicsSubscribedListBox: TListBox;
+    TMSMQTTClient1: TTMSMQTTClient;
+    LabelQos: TLabel;
+    QoScombobox: TComboBox;
+    RetFlag: TCheckBox;
+    SSLFlag: TCheckBox;
+    LabelLWT: TLabel;
     procedure MemoLogChange(Sender: TObject);
     procedure ConnectBtnClick(Sender: TObject);
-    procedure TMSMQTTClient1ConnectedStatusChanged(ASender: TObject;
-      const AConnected: Boolean; AStatus: TTMSMQTTConnectionStatus);
-    procedure TMSMQTTClient1PublishReceived(ASender: TObject; APacketID: Word;
-      ATopic: string; APayload: TArray<System.Byte>);
     procedure DisconnectBtnClick(Sender: TObject);
     procedure BrokerBoxNameChange(Sender: TObject);
     procedure WeblabelClick(Sender: TObject);
     procedure WeblabelMouseEnter(Sender: TObject);
     procedure WeblabelMouseLeave(Sender: TObject);
-    procedure PortComboBoxChange(Sender: TObject);
-    procedure EditPasswordChange(Sender: TObject);
-    procedure EditNameChange(Sender: TObject);
     procedure SaveMemoItemClick(Sender: TObject);
-    procedure RadioButtonSSLClick(Sender: TObject);
     procedure Splitter1Moved(Sender: TObject);
     procedure PublishBtnClick(Sender: TObject);
+    procedure EditTopicSubsBoxChange(Sender: TObject);
+    procedure ButtonSubsClick(Sender: TObject);
+    procedure TopicsSubscribedListBoxClick(Sender: TObject);
+    procedure TMSMQTTClient1ConnectedStatusChanged(ASender: TObject;
+      const AConnected: Boolean; AStatus: TTMSMQTTConnectionStatus);
+    procedure TMSMQTTClient1PublishReceived(ASender: TObject; APacketID: Word;
+      ATopic: string; APayload: TArray<System.Byte>);
 
   private
     { Private declarations }
@@ -91,6 +95,7 @@ type
 var
   FormMQTT: TFormMQTT;
 
+
 implementation
 
 {$R *.dfm}
@@ -98,7 +103,8 @@ implementation
 //type
 //  tQos=set of (qosAtMostOnce,qosAtLeastOnce,qosExactlyOnce);
 
-
+var
+  BrokerConnected: boolean =false;
 
 
 
@@ -112,57 +118,37 @@ implementation
 //event executed when a broker URL is selected from the list box
 procedure TFormMQTT.BrokerBoxNameChange(Sender: TObject);
 begin
-    TMSMQTTClient1.BrokerHostName:=BrokerBoxName.Text;
-    EditPassword.Text:='';
-    EditName.Text:='';
+    EditPassword.Clear;
+    EditName.Clear;
 end;
 
-//event executed when the password is changed
-procedure TFormMQTT.EditNameChange(Sender: TObject);
-begin
-  TMSMQTTClient1.Credentials.Username:=EditName.Text;
-end;
-//event executed when the username is changed
-procedure TFormMQTT.EditPasswordChange(Sender: TObject);
-begin
-  TMSMQTTClient1.Credentials.Password:=EditPassword.Text;
-end;
-
-//event executed when the port number is changed
-procedure TFormMQTT.PortComboBoxChange(Sender: TObject);
-begin
-    TMSMQTTClient1.BrokerPort:=StrToInt(PortComboBox.Text);
-end;
-
-
-//event executed when the SSL check box os clicked
-procedure TFormMQTT.RadioButtonSSLClick(Sender: TObject);
-begin
-    TMSMQTTClient1.UseSSL:=RadioButtonSSL.Checked;
-end;
 
 //Event executed when the Connect button is pressed
 procedure TFormMQTT.ConnectBtnClick(Sender: TObject);
 begin
+    TMSMQTTClient1.BrokerHostName:=BrokerBoxName.Text;
+    TMSMQTTClient1.Credentials.Username:=EditName.text;
+    TMSMQTTClient1.Credentials.Password:=EditPassword.Text;
+    TMSMQTTClient1.UseSSL:=SSLFlag.Checked;
+    TMSMQTTClient1.BrokerPort:=StrToInt(PortComboBox.Text);
+    TMSMQTTClient1.LastWillSettings.Topic:=EditTopic.Text;
+    TMSMQTTClient1.LastWillSettings.WillMessage:=EditPayload.Text;
+    TMSMQTTClient1.LastWillSettings.Retain:=RetFlag.Checked;
+    case QoScombobox.Text[1] of
+      '0': TMSMQTTClient1.LastWillSettings.QoS:=qosAtMostOnce;
+      '1': TMSMQTTClient1.LastWillSettings.QoS:=qosAtLeastOnce;
+      '2': TMSMQTTClient1.LastWillSettings.QoS:=qosExactlyOnce;
+    end;
     TMSMQTTClient1.Connect();
 end;
 
 //Event executed when the disconnect button is pressed
 procedure TFormMQTT.DisconnectBtnClick(Sender: TObject);
 begin
-    TMSMQTTClient1.Disconnect();
+     TMSMQTTClient1.Disconnect();
 end;
 
-(*********************************************************************************)
-(*                                                                               *)
-(*          Functions to scroll the memo log window                              *)
-(*                                                                               *)
-(*********************************************************************************)
-//EVENT executed when MemoLog is on change to scroll the memoLog until the last row
-procedure TFormMQTT.MemoLogChange(Sender: TObject);
-begin
-  SendMessage(MemoLog.Handle, EM_LINESCROLL, 0,MemoLog.Lines.Count);
-end;
+
 
 (*********************************************************************************)
 (*                                                                               *)
@@ -176,17 +162,22 @@ end;
 //when connected, subscribes to the topics Estado/Led, Estado/Botao and TopicIoTboard71
 procedure TFormMQTT.TMSMQTTClient1ConnectedStatusChanged(ASender: TObject;
   const AConnected: Boolean; AStatus: TTMSMQTTConnectionStatus);
-  var i:byte;
 begin
     if (AConnected) then
       begin
+        BrokerConnected:=true;
         ConnectBtn.Enabled:=False;
         BrokerBoxName.Enabled:=False;
         DisconnectBtn.Enabled:=True;
         EditName.Enabled:=false;
         EditPassword.Enabled:=false;
+        PortComboBox.Enabled:=false;
+        SSLFlag.Enabled:=false;
         PublishBtn.Enabled:=true;
-        SubTopicsMemo.Enabled:=false;
+        labelLWT.Visible:=False;
+        EditTopic.Clear;
+        EditPayload.Clear;
+        (*SubTopicsMemo.Enabled:=false;
         if SubTopicsMemo.Lines.Count>0 then
           for i:=0 to  SubTopicsMemo.Lines.count-1 do
               begin
@@ -201,20 +192,28 @@ begin
                   '1':  MemoLog.Lines.Add(SubTopicsMemo.Lines[i]+', QoS 1');
                   '2':  MemoLog.Lines.Add(SubTopicsMemo.Lines[i]+', QoS 2');
                 end;  }
-              end;
+              end;  *)
         LedShape.Brush.Color:=clRed;
         MemoLog.Lines.Add('Client connected to server '+TMSMQTTClient1.BrokerHostName+' at '+FormatDateTime('hh:nn:ss', Now));
       end
       else
       begin
+        BrokerConnected:=false;
         ConnectBtn.Enabled:=True;
         BrokerBoxName.Enabled:=True;
         DisconnectBtn.Enabled:=False;
         EditName.Enabled:=true;
         EditPassword.Enabled:=true;
+        PortComboBox.Enabled:=true;
+        SSLFlag.Enabled:=true;
         PublishBtn.Enabled:=false;
-        SubTopicsMemo.Enabled:=true;
+        labelLWT.Visible:=True;
+        //SubTopicsMemo.Enabled:=true;
         LedShape.Brush.Color:=clMaroon;
+        EditTopic.Clear;
+        EditPayload.Clear;
+        TopicsSubscribedListBox.Clear;
+        EditTopicSubsBox.Clear;
         MemoLog.Lines.Add('Client disconnected from server '+TMSMQTTClient1.BrokerHostName+' at '+FormatDateTime('hh:nn:ss', Now));
         case AStatus of
           csNotConnected: MemoLog.Lines.Add('Client not connected');
@@ -247,15 +246,80 @@ end;
 //the topic edit box
 procedure TFormMQTT.PublishBtnClick(Sender: TObject);
 begin
+   //TMSMQTTClient1.Publish(EditTopic.Text,EditPayload.Text,RetFlag.Checked,StrToInt(QoScombobox.Text));
     case QoScombobox.Text[1] of
-      '0': TMSMQTTClient1.Publish(EditTopic.Text,EditPayload.Text,qosAtMostOnce);
-      '1': TMSMQTTClient1.Publish(EditTopic.Text,EditPayload.Text,qosAtLeastOnce);
-      '2': TMSMQTTClient1.Publish(EditTopic.Text,EditPayload.Text,qosExactlyOnce);
+      '0': TMSMQTTClient1.Publish(EditTopic.Text,EditPayload.Text,qosAtMostOnce,RetFlag.Checked);
+      '1': TMSMQTTClient1.Publish(EditTopic.Text,EditPayload.Text,qosAtLeastOnce,RetFlag.Checked);
+      '2': TMSMQTTClient1.Publish(EditTopic.Text,EditPayload.Text,qosExactlyOnce,RetFlag.Checked);
     end;
     MemoLog.Lines.Add('Message published in the topic ['+EditTopic.Text+']: '+EditPayload.Text);
     EditPayload.Clear;
 end;
 
+
+
+(*********************************************************************************)
+(*                                                                               *)
+(*          Functions to subscribe and unsubscribe a topic                       *)
+(*                                                                               *)
+(*********************************************************************************)
+
+//event executed when a topic to be subscribed is written or deleted from the
+//topic edit box
+procedure TFormMQTT.EditTopicSubsBoxChange(Sender: TObject);
+begin
+    if (EditTopicSubsBox.Text<>'') then
+          ButtonSubs.Enabled:=True;
+end;
+
+//event executed when Subscribe Button is pressed
+procedure TFormMQTT.ButtonSubsClick(Sender: TObject);
+begin
+    if (BrokerConnected) and (EditTopicSubsBox.Text<>'') and (ButtonSubs.Caption='Subscribe') then
+      try
+         TMSMQTTClient1.Subscribe(EditTopicSubsBox.Text);
+         MemoLog.Lines.Add('Topic subscribed: '+EditTopicSubsBox.Text);
+         TopicsSubscribedListBox.Items.Add(EditTopicSubsBox.Text);
+         EditTopicSubsBox.Clear;
+         ButtonSubs.Enabled:=false;
+      except
+        MemoLog.Lines.Add('Failed to subscribe topic: '+EditTopicSubsBox.Text)
+      end;
+    if  (BrokerConnected) and (EditTopicSubsBox.Text<>'') and (ButtonSubs.Caption='Unsubscribe') then
+      try
+        TMSMQTTClient1.Unsubscribe(EditTopicSubsBox.Text);
+        MemoLog.Lines.Add('Topic unsubscribed: '+EditTopicSubsBox.Text);
+        TopicsSubscribedListBox.DeleteSelected;
+        EditTopicSubsBox.Clear;
+        ButtonSubs.Caption:='Subscribe';
+        ButtonSubs.Enabled:=false;
+        TopicsSubscribedListBox.ClearSelection;
+      except
+        MemoLog.Lines.Add('Failed to unsubscribe topic '+EditTopicSubsBox.Text);
+        EditTopicSubsBox.Clear;
+        ButtonSubs.Caption:='Subscribe';
+        ButtonSubs.Enabled:=false;
+        TopicsSubscribedListBox.ClearSelection;
+      end;
+end;
+
+//event executed when an item from the topics list box is selected to be unsubscribed
+procedure TFormMQTT.TopicsSubscribedListBoxClick(Sender: TObject);
+begin
+    if TopicsSubscribedListBox.ItemIndex>=0 then
+      begin
+         with TopicsSubscribedListBox do
+            EditTopicSubsBox.Text:=Items[ItemIndex];
+         ButtonSubs.Caption:='Unsubscribe';
+         ButtonSubs.Enabled:=True
+      end;
+end;
+
+(*********************************************************************************)
+(*                                                                               *)
+(*          Miscelaneous functions                                               *)
+(*                                                                               *)
+(*********************************************************************************)
 
 //procedure to save the memo log window on a file
 procedure TFormMQTT.SaveMemoItemClick(Sender: TObject);
@@ -278,8 +342,22 @@ begin
     LabelPayload.Left:=PublishPanel.Left+ EditPayload.Left;
 end;
 
+
+
+(*********************************************************************************)
+(*                                                                               *)
+(*          Functions to scroll the memo log window                              *)
+(*                                                                               *)
+(*********************************************************************************)
+//EVENT executed when MemoLog is on change to scroll the memoLog until the last row
+procedure TFormMQTT.MemoLogChange(Sender: TObject);
+begin
+  SendMessage(MemoLog.Handle, EM_LINESCROLL, 0,MemoLog.Lines.Count);
+end;
+
+
 (**************************************************************************************)
-{Procedures to handle the web site}
+{             Procedures to handle the web site                                       }
 (**************************************************************************************)
 //Open the web site
 procedure TFormMQTT.WeblabelClick(Sender: TObject);
@@ -298,5 +376,7 @@ procedure TFormMQTT.WeblabelMouseLeave(Sender: TObject);
 begin
      Weblabel.Font.Color:= clAqua;
 end;
+
+
 
 end.
